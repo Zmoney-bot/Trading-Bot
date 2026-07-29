@@ -4,3 +4,8 @@ __pycache__/
 *.pyc
 *.log
 .DS_Store
+
+# Runtime bot data
+data/*.db
+trade_genie_contrarian_signals.csv
+trade_genie_contrarian_stats.json
