@@ -1,0 +1,22 @@
+{
+    "total_cycles": 172,
+    "total_scans": 854,
+    "total_signals": 5,
+    "total_resolved": 2,
+    "wins": 2,
+    "losses": 0,
+    "expired": 0,
+    "scans_by_symbol": {
+        "USDJPY=X": 171,
+        "EURUSD=X": 171,
+        "GBPUSD=X": 171,
+        "GC=F": 170,
+        "^NDX": 171
+    },
+    "signals_by_symbol": {
+        "USDJPY=X": 2,
+        "GC=F": 1,
+        "GBPUSD=X": 1,
+        "EURUSD=X": 1
+    }
+}
