@@ -1,35 +1,165 @@
 
-import sqlite3
+import os
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
+from storage import SignalStore
 
 BASE_DIR = Path(__file__).resolve().parent
-DATABASE_FILE = BASE_DIR / "data" / "trade_genie.db"
+RUNTIME_DIR = Path(os.getenv("TRADE_GENIE_DATA_DIR", str(BASE_DIR))).expanduser()
+DATABASE_FILE = RUNTIME_DIR / "trade_genie.db"
+SIGNALS_BACKUP = RUNTIME_DIR / "trade_genie_contrarian_signals.csv"
+SIGNAL_STORE = SignalStore(DATABASE_FILE, SIGNALS_BACKUP)
 
 
 st.set_page_config(
-    page_title="Trade Genie Dashboard",
+    page_title="Trade Genie | Operator Dashboard",
+    page_icon="🧠",
     layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
-st.title("Trade Genie Operator Dashboard")
+st.markdown(
+    """
+    <style>
+        :root {
+            --tg-blue: #38bdf8;
+            --tg-green: #22c55e;
+            --tg-card: rgba(17, 24, 39, 0.86);
+            --tg-border: rgba(148, 163, 184, 0.18);
+        }
+
+        .stApp {
+            background:
+                radial-gradient(circle at 8% 0%, rgba(14, 165, 233, 0.12), transparent 28rem),
+                radial-gradient(circle at 92% 8%, rgba(34, 197, 94, 0.08), transparent 24rem),
+                #080d17;
+        }
+
+        .block-container {
+            max-width: 1500px;
+            padding-top: 2.2rem;
+            padding-bottom: 4rem;
+        }
+
+        .tg-hero {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1.35rem 1.5rem;
+            margin-bottom: 1.4rem;
+            border: 1px solid var(--tg-border);
+            border-radius: 18px;
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(8, 47, 73, 0.72));
+            box-shadow: 0 18px 45px rgba(0, 0, 0, 0.24);
+        }
+
+        .tg-brand { display: flex; align-items: center; gap: 1rem; }
+        .tg-logo {
+            display: grid;
+            place-items: center;
+            width: 54px;
+            height: 54px;
+            border-radius: 15px;
+            color: white;
+            font-size: 1.55rem;
+            background: linear-gradient(145deg, #0284c7, #22c55e);
+            box-shadow: 0 10px 30px rgba(14, 165, 233, 0.25);
+        }
+
+        .tg-title { margin: 0; color: #f8fafc; font-size: 1.65rem; font-weight: 750; }
+        .tg-subtitle { margin: .2rem 0 0; color: #94a3b8; font-size: .9rem; }
+        .tg-live {
+            display: inline-flex;
+            align-items: center;
+            gap: .5rem;
+            padding: .5rem .8rem;
+            border: 1px solid rgba(34, 197, 94, .28);
+            border-radius: 999px;
+            color: #bbf7d0;
+            background: rgba(34, 197, 94, .1);
+            font-size: .8rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .tg-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--tg-green);
+            box-shadow: 0 0 12px rgba(34, 197, 94, .85);
+        }
+
+        div[data-testid="stMetric"] {
+            min-height: 118px;
+            padding: 1rem 1.1rem;
+            border: 1px solid var(--tg-border);
+            border-radius: 15px;
+            background: var(--tg-card);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, .16);
+        }
+
+        div[data-testid="stMetricLabel"] { color: #94a3b8; }
+        div[data-testid="stMetricValue"] { color: #f8fafc; }
+        div[data-testid="stDataFrame"] {
+            overflow: hidden;
+            border: 1px solid var(--tg-border);
+            border-radius: 14px;
+        }
+
+        div[data-testid="stAlert"] { border-radius: 14px; }
+        hr { border-color: var(--tg-border) !important; }
+        h2, h3 { color: #e2e8f0 !important; letter-spacing: -.02em; }
+
+        #MainMenu, footer { visibility: hidden; }
+
+        @media (max-width: 700px) {
+            .block-container { padding-top: 1rem; }
+            .tg-hero { align-items: flex-start; padding: 1rem; }
+            .tg-logo { width: 44px; height: 44px; }
+            .tg-title { font-size: 1.2rem; }
+            .tg-live { font-size: .7rem; }
+        }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    f"""
+    <div class="tg-hero">
+        <div class="tg-brand">
+            <div class="tg-logo">🧠</div>
+            <div>
+                <p class="tg-title">Trade Genie</p>
+                <p class="tg-subtitle">Operator Dashboard · Contrarian + NQ/MNQ</p>
+            </div>
+        </div>
+        <div class="tg-live"><span class="tg-dot"></span> LIVE · AUTO-REFRESH</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 st_autorefresh(interval=10000, key="trade_genie_refresh")
 
 def load_signals() -> pd.DataFrame:
-    if not DATABASE_FILE.exists():
-        return pd.DataFrame()
-
-    with sqlite3.connect(DATABASE_FILE) as connection:
-        return pd.read_sql_query(
-            "SELECT * FROM signals ORDER BY signal_timestamp DESC",
-            connection,
-        )
+    frame = SIGNAL_STORE.load_frame()
+    if frame.empty:
+        return frame
+    return frame.sort_values("signal_timestamp", ascending=False)
 
 
 signals = load_signals()
+
+st.caption(
+    "Live cloud database · Last dashboard refresh: "
+    + datetime.now().astimezone().strftime("%b %d, %Y · %-I:%M:%S %p %Z")
+)
 
 
 if signals.empty:
@@ -189,6 +319,8 @@ display_columns = [
     column
     for column in [
         "signal_timestamp",
+        "strategy_name",
+        "setup_family",
         "asset_name",
         "direction",
         "entry_price",
