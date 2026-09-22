@@ -1222,35 +1222,6 @@ def resolve_pending_signals(
         )
 
     if changed:
-        completed = stats["wins"] + stats["losses"]
-        win_rate = (stats["wins"] / completed * 100) if completed else 0.0
-
-        if outcome == "WIN":
-            result_icon = "🟢"
-            result_text = "WIN"
-            r_result = f"+{float(row['reward_risk']):.1f}R"
-        elif outcome == "LOSS":
-            result_icon = "🔴"
-            result_text = "LOSS"
-            r_result = "-1.0R"
-        else:
-            result_icon = "🟡"
-            result_text = "EXPIRED"
-            r_result = "0.0R"
-
-        send_telegram_message(
-            f"{result_icon} <b>TRADE CLOSED</b>\n\n"
-            f"<b>Asset:</b> {asset_name}\n"
-            f"<b>Direction:</b> {direction}\n"
-            f"<b>Result:</b> {result_text}\n"
-            f"<b>Entry:</b> {entry_price:.5f}\n"
-            f"<b>Exit:</b> {exit_price:.5f}\n"
-            f"<b>R Result:</b> {r_result}\n\n"
-            f"<b>Wins:</b> {stats['wins']}\n"
-            f"<b>Losses:</b> {stats['losses']}\n"
-            f"<b>Win Rate:</b> {win_rate:.2f}%"
-        )
-
         save_signal_log(signal_log)
         save_stats(stats)
 
