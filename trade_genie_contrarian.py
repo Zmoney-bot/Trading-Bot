@@ -81,6 +81,21 @@ DAILY_LOSS_LIMIT = 2
 ONE_PENDING_SIGNAL_PER_MARKET = True
 CLOSED_CANDLES_ONLY = True
 
+# Paper execution
+# EXPERIMENTAL / INCOMPLETE: this engine currently opens simulated
+# positions only. It does not yet close positions, realize P&L, track
+# running account equity, or enforce the daily drawdown limit defined
+# below. Do not treat trade_genie_paper_trades.csv as a finished
+# simulator's output. Defaults to disabled until the closing/accounting
+# logic exists.
+PAPER_TRADING_ENABLED = False
+PAPER_STARTING_BALANCE = 10_000.00
+PAPER_RISK_PERCENT = 1.0
+PAPER_MAX_OPEN_TRADES = 3
+PAPER_DAILY_DRAWDOWN_LIMIT_PERCENT = 3.0  # NOTE: defined, not yet enforced
+PAPER_ACCOUNT_FILE = BASE_DIR / "trade_genie_paper_account.json"  # NOTE: defined, not yet used
+PAPER_TRADES_FILE = BASE_DIR / "trade_genie_paper_trades.csv"
+
 # Filters
 TRADING_SESSION_FILTER_ENABLED = True
 NEWS_FILTER_ENABLED = True
@@ -989,6 +1004,118 @@ def analyze_market(
 
 
 # ============================================================
+def create_paper_trade(signal: dict[str, Any]) -> bool:
+    """Open a simulated paper position from a qualified signal.
+
+    EXPERIMENTAL / INCOMPLETE: this only opens a position. There is
+    currently no corresponding close/resolve step -- no realized P&L,
+    no R-multiple, no running equity update, and the daily-drawdown
+    limit above is not enforced. Positions written here will sit as
+    "OPEN" indefinitely until a closing engine is built. Disabled by
+    default via PAPER_TRADING_ENABLED = False.
+    """
+    if not PAPER_TRADING_ENABLED:
+        return False
+
+    columns = [
+        "trade_id",
+        "signal_id",
+        "opened_timestamp",
+        "asset",
+        "asset_name",
+        "direction",
+        "entry_price",
+        "stop_loss",
+        "take_profit",
+        "risk_distance",
+        "risk_percent",
+        "risk_amount",
+        "position_size",
+        "status",
+        "exit_price",
+        "pnl",
+        "r_multiple",
+        "closed_timestamp",
+        "outcome",
+    ]
+
+    try:
+        if PAPER_TRADES_FILE.exists():
+            trades = pd.read_csv(PAPER_TRADES_FILE)
+        else:
+            trades = pd.DataFrame(columns=columns)
+
+        for column in columns:
+            if column not in trades.columns:
+                trades[column] = None
+
+        open_trades = trades[
+            trades["status"].astype(str).str.upper() == "OPEN"
+        ]
+
+        if len(open_trades) >= PAPER_MAX_OPEN_TRADES:
+            print(
+                f"Paper trade blocked: maximum "
+                f"{PAPER_MAX_OPEN_TRADES} open trades reached."
+            )
+            return False
+
+        trade_id = f"PAPER-{signal['signal_id']}"
+        existing_ids = trades["trade_id"].astype(str).tolist()
+        if trade_id in existing_ids:
+            print(f"Paper trade already exists: {trade_id}")
+            return False
+
+        entry_price = float(signal["entry_price"])
+        stop_loss = float(signal["stop_loss"])
+        risk_distance = abs(entry_price - stop_loss)
+
+        if risk_distance <= 0:
+            print("Paper trade blocked: invalid risk distance.")
+            return False
+
+        risk_amount = PAPER_STARTING_BALANCE * (PAPER_RISK_PERCENT / 100)
+        position_size = risk_amount / risk_distance
+
+        paper_trade = {
+            "trade_id": trade_id,
+            "signal_id": signal["signal_id"],
+            "opened_timestamp": signal["signal_timestamp"],
+            "asset": signal["asset"],
+            "asset_name": signal["asset_name"],
+            "direction": signal["direction"],
+            "entry_price": entry_price,
+            "stop_loss": stop_loss,
+            "take_profit": float(signal["take_profit"]),
+            "risk_distance": risk_distance,
+            "risk_percent": PAPER_RISK_PERCENT,
+            "risk_amount": risk_amount,
+            "position_size": position_size,
+            "status": "OPEN",
+            "exit_price": None,
+            "pnl": 0.0,
+            "r_multiple": 0.0,
+            "closed_timestamp": None,
+            "outcome": None,
+        }
+
+        trades = pd.concat(
+            [trades, pd.DataFrame([paper_trade])],
+            ignore_index=True,
+        )
+        trades.to_csv(PAPER_TRADES_FILE, index=False)
+
+        print(
+            f"Paper trade opened: {signal['asset_name']} "
+            f"{signal['direction']} | Risk ${risk_amount:,.2f}"
+        )
+        return True
+
+    except Exception as error:
+        print(f"Could not create paper trade: {error}")
+        return False
+
+
 # SIGNAL CREATION
 # ============================================================
 
@@ -1089,6 +1216,7 @@ def create_signal_if_qualified(
         ignore_index=True,
     )
     save_signal_log(signal_log)
+    create_paper_trade(new_signal)
     count_signal(symbol)
 
     eastern_timestamp = timestamp_to_eastern(timestamp)

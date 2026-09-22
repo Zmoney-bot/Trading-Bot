@@ -9,3 +9,5 @@ __pycache__/
 data/*.db
 trade_genie_contrarian_signals.csv
 trade_genie_contrarian_stats.json
+trade_genie_paper_trades.csv
+trade_genie_paper_account.json
